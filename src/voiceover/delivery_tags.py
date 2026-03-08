@@ -92,15 +92,10 @@ def add_delivery_tags(
 
     # Create default LLM provider if not provided
     if llm is None:
-        from ..understanding.llm_provider import ClaudeCodeLLMProvider
-        from ..config import LLMConfig
+        from ..understanding.llm_provider import get_llm_provider
+        from ..config import load_config
 
-        config = LLMConfig(provider="claude-code", model="claude-sonnet-4-20250514")
-        llm = ClaudeCodeLLMProvider(
-            config,
-            working_dir=working_dir or Path.cwd(),
-            timeout=60,
-        )
+        llm = get_llm_provider(load_config())
 
     prompt = f"""Add delivery tags to this narration:
 

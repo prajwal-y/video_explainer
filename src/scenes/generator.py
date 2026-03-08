@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config, LLMConfig, load_config
-from ..understanding.llm_provider import ClaudeCodeLLMProvider
+from ..understanding.llm_provider import ClaudeCodeLLMProvider, get_llm_provider
 from .syntax_verifier import SyntaxVerifier, VerificationResult as SyntaxVerificationResult
 from .validator import SceneValidator, ValidationResult
 
@@ -1842,32 +1842,34 @@ class SceneGenerator:
             output_path=scene_file,
         )
 
-        # Use LLM to sync timing
-        llm_config = LLMConfig(provider="claude-code", model="claude-sonnet-4-20250514")
-        llm = ClaudeCodeLLMProvider(
-            llm_config,
-            working_dir=self.working_dir,
-            timeout=self.timeout,
-        )
+        llm = get_llm_provider(self.config)
 
-        full_prompt = f"""{prompt}
+        if isinstance(llm, ClaudeCodeLLMProvider):
+            full_prompt = f"""{prompt}
 
 Write the complete updated component code to the file: {scene_file}
 """
+            result = llm.generate_with_file_access(full_prompt, allow_writes=True)
+            if not result.success:
+                raise RuntimeError(f"LLM sync failed: {result.error_message}")
+            if not scene_file.exists():
+                code = self._extract_code(result.response)
+                if code:
+                    with open(scene_file, "w") as f:
+                        f.write(code)
+                else:
+                    raise RuntimeError(f"Sync failed - no code generated for {scene_file}")
+        else:
+            full_prompt = f"""{prompt}
 
-        result = llm.generate_with_file_access(full_prompt, allow_writes=True)
-
-        if not result.success:
-            raise RuntimeError(f"LLM sync failed: {result.error_message}")
-
-        # Verify file was updated (or extract and write code)
-        if not scene_file.exists():
-            code = self._extract_code(result.response)
-            if code:
-                with open(scene_file, "w") as f:
-                    f.write(code)
-            else:
+Write the complete updated component code as a single TypeScript/TSX code block.
+"""
+            response = llm.generate(full_prompt)
+            code = self._extract_code(response)
+            if not code:
                 raise RuntimeError(f"Sync failed - no code generated for {scene_file}")
+            with open(scene_file, "w") as f:
+                f.write(code)
 
         # Validate the synced scene
         validation = self.validator.validate_single_scene(scene_file)
@@ -2037,21 +2039,24 @@ Please fix this issue and try again.
         output_path: Path,
         validation_feedback: str = "",
     ) -> None:
-        """Generate a scene file using Claude Code.
+        """Generate a scene file using the configured LLM provider.
 
         Args:
             base_prompt: The base generation prompt
             output_path: Path to write the scene file
             validation_feedback: Optional feedback from previous validation failure
         """
-        llm_config = LLMConfig(provider="claude-code", model="claude-sonnet-4-20250514")
-        llm = ClaudeCodeLLMProvider(
-            llm_config,
-            working_dir=self.working_dir,
-            timeout=self.timeout,
-        )
+        llm = get_llm_provider(self.config)
 
-        full_prompt = f"""## FIRST: Load the Remotion skill
+        full_prompt = f"""{SCENE_SYSTEM_PROMPT}
+
+{base_prompt}
+{validation_feedback}
+Write the complete component code as a single TypeScript/TSX code block.
+"""
+
+        if isinstance(llm, ClaudeCodeLLMProvider):
+            full_prompt_cc = f"""## FIRST: Load the Remotion skill
 Before doing ANYTHING else, invoke the `/remotion` skill by using the Skill tool with skill="remotion".
 This loads essential Remotion best practices for animations, timing, and visual patterns.
 DO THIS NOW before proceeding.
@@ -2064,20 +2069,24 @@ DO THIS NOW before proceeding.
 {validation_feedback}
 Write the complete component code to the file: {output_path}
 """
-
-        result = llm.generate_with_file_access(full_prompt, allow_writes=True)
-
-        if not result.success:
-            raise RuntimeError(f"LLM generation failed: {result.error_message}")
-
-        # Verify file was created
-        if not output_path.exists():
-            code = self._extract_code(result.response)
-            if code:
-                with open(output_path, "w") as f:
-                    f.write(code)
-            else:
-                raise RuntimeError(f"Scene file not created: {output_path}")
+            result = llm.generate_with_file_access(full_prompt_cc, allow_writes=True)
+            if not result.success:
+                raise RuntimeError(f"LLM generation failed: {result.error_message}")
+            if not output_path.exists():
+                code = self._extract_code(result.response)
+                if code:
+                    with open(output_path, "w") as f:
+                        f.write(code)
+                else:
+                    raise RuntimeError(f"Scene file not created: {output_path}")
+        else:
+            response = llm.generate(full_prompt, system_prompt=SCENE_SYSTEM_PROMPT)
+            code = self._extract_code(response)
+            if not code:
+                raise RuntimeError("LLM returned no extractable code")
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(output_path, "w") as f:
+                f.write(code)
 
     def _generate_styles(
         self, scenes_dir: Path, project_title: str, sidebar_width: int = 0

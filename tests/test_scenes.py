@@ -267,12 +267,13 @@ export const TestScene: React.FC = () => {
         assert "hook: HookScene" in content
         assert "core_explanation: ExplanationScene" in content
 
-    @patch("src.scenes.generator.ClaudeCodeLLMProvider")
-    def test_generate_scene_creates_file(self, mock_llm_class, temp_project_dir, mock_llm_response):
+    @patch("src.scenes.generator.get_llm_provider")
+    def test_generate_scene_creates_file(self, mock_get_provider, temp_project_dir, mock_llm_response):
         """Test that scene generation creates a file."""
-        mock_llm = MagicMock()
+        from src.understanding.llm_provider import ClaudeCodeLLMProvider
+        mock_llm = MagicMock(spec=ClaudeCodeLLMProvider)
         mock_llm.generate_with_file_access.return_value = mock_llm_response
-        mock_llm_class.return_value = mock_llm
+        mock_get_provider.return_value = mock_llm
 
         generator = SceneGenerator()
         scenes_dir = temp_project_dir / "scenes"
@@ -298,12 +299,13 @@ export const TestScene: React.FC = () => {
         assert result["filename"] == "TestSceneScene.tsx"
         assert (scenes_dir / "TestSceneScene.tsx").exists()
 
-    @patch("src.scenes.generator.ClaudeCodeLLMProvider")
-    def test_generate_all_scenes(self, mock_llm_class, temp_project_dir, mock_llm_response):
+    @patch("src.scenes.generator.get_llm_provider")
+    def test_generate_all_scenes(self, mock_get_provider, temp_project_dir, mock_llm_response):
         """Test full scene generation pipeline."""
-        mock_llm = MagicMock()
+        from src.understanding.llm_provider import ClaudeCodeLLMProvider
+        mock_llm = MagicMock(spec=ClaudeCodeLLMProvider)
         mock_llm.generate_with_file_access.return_value = mock_llm_response
-        mock_llm_class.return_value = mock_llm
+        mock_get_provider.return_value = mock_llm
 
         generator = SceneGenerator()
 
@@ -463,15 +465,16 @@ class TestSceneGeneratorOldFormat:
 
         return project_dir
 
-    @patch("src.scenes.generator.ClaudeCodeLLMProvider")
-    def test_handles_old_visual_cue_format(self, mock_llm_class, old_format_script):
+    @patch("src.scenes.generator.get_llm_provider")
+    def test_handles_old_visual_cue_format(self, mock_get_provider, old_format_script):
         """Test that old visual_cue format is handled correctly."""
-        mock_llm = MagicMock()
+        from src.understanding.llm_provider import ClaudeCodeLLMProvider
+        mock_llm = MagicMock(spec=ClaudeCodeLLMProvider)
         mock_llm.generate_with_file_access.return_value = MagicMock(
             success=True,
             response='import React from "react"; export const HookSceneScene = () => null;',
         )
-        mock_llm_class.return_value = mock_llm
+        mock_get_provider.return_value = mock_llm
 
         generator = SceneGenerator()
         results = generator.generate_all_scenes(
@@ -697,14 +700,15 @@ export const TestScene: React.FC = () => {
             modified_files=[],
         )
 
-    @patch("src.scenes.generator.ClaudeCodeLLMProvider")
+    @patch("src.scenes.generator.get_llm_provider")
     def test_generate_with_manifest_passes_timestamps(
-        self, mock_llm_class, temp_project_with_manifest, mock_llm_response
+        self, mock_get_provider, temp_project_with_manifest, mock_llm_response
     ):
         """Test that word timestamps from manifest are passed to scene generation."""
-        mock_llm = MagicMock()
+        from src.understanding.llm_provider import ClaudeCodeLLMProvider
+        mock_llm = MagicMock(spec=ClaudeCodeLLMProvider)
         mock_llm.generate_with_file_access.return_value = mock_llm_response
-        mock_llm_class.return_value = mock_llm
+        mock_get_provider.return_value = mock_llm
 
         generator = SceneGenerator()
         manifest_path = temp_project_with_manifest / "voiceover" / "manifest.json"
@@ -732,14 +736,15 @@ export const TestScene: React.FC = () => {
         assert "USE THESE FOR ANIMATION TIMING" in second_prompt
         assert '"Here"' in second_prompt or '"works"' in second_prompt
 
-    @patch("src.scenes.generator.ClaudeCodeLLMProvider")
+    @patch("src.scenes.generator.get_llm_provider")
     def test_generate_without_manifest_uses_fallback(
-        self, mock_llm_class, temp_project_with_manifest, mock_llm_response
+        self, mock_get_provider, temp_project_with_manifest, mock_llm_response
     ):
         """Test that generation works without manifest using fallback timing."""
-        mock_llm = MagicMock()
+        from src.understanding.llm_provider import ClaudeCodeLLMProvider
+        mock_llm = MagicMock(spec=ClaudeCodeLLMProvider)
         mock_llm.generate_with_file_access.return_value = mock_llm_response
-        mock_llm_class.return_value = mock_llm
+        mock_get_provider.return_value = mock_llm
 
         generator = SceneGenerator()
 
@@ -757,14 +762,15 @@ export const TestScene: React.FC = () => {
         first_prompt = calls[0][0][0]
         assert "NOT AVAILABLE" in first_prompt or "percentage-based timing as a fallback" in first_prompt
 
-    @patch("src.scenes.generator.ClaudeCodeLLMProvider")
+    @patch("src.scenes.generator.get_llm_provider")
     def test_generate_with_nonexistent_manifest(
-        self, mock_llm_class, temp_project_with_manifest, mock_llm_response
+        self, mock_get_provider, temp_project_with_manifest, mock_llm_response
     ):
         """Test that generation works when manifest path doesn't exist."""
-        mock_llm = MagicMock()
+        from src.understanding.llm_provider import ClaudeCodeLLMProvider
+        mock_llm = MagicMock(spec=ClaudeCodeLLMProvider)
         mock_llm.generate_with_file_access.return_value = mock_llm_response
-        mock_llm_class.return_value = mock_llm
+        mock_get_provider.return_value = mock_llm
 
         generator = SceneGenerator()
         nonexistent_path = temp_project_with_manifest / "nonexistent" / "manifest.json"
@@ -778,14 +784,15 @@ export const TestScene: React.FC = () => {
         # Should still work, just without timestamps
         assert len(results["scenes"]) == 2
 
-    @patch("src.scenes.generator.ClaudeCodeLLMProvider")
+    @patch("src.scenes.generator.get_llm_provider")
     def test_generate_with_missing_scene_in_manifest(
-        self, mock_llm_class, temp_project_with_manifest, mock_llm_response
+        self, mock_get_provider, temp_project_with_manifest, mock_llm_response
     ):
         """Test handling when manifest doesn't have timestamps for all scenes."""
-        mock_llm = MagicMock()
+        from src.understanding.llm_provider import ClaudeCodeLLMProvider
+        mock_llm = MagicMock(spec=ClaudeCodeLLMProvider)
         mock_llm.generate_with_file_access.return_value = mock_llm_response
-        mock_llm_class.return_value = mock_llm
+        mock_get_provider.return_value = mock_llm
 
         # Modify manifest to only have one scene
         manifest_path = temp_project_with_manifest / "voiceover" / "manifest.json"
@@ -852,14 +859,15 @@ export const TestSceneScene: React.FC = () => <AbsoluteFill>Test</AbsoluteFill>;
             modified_files=[],
         )
 
-    @patch("src.scenes.generator.ClaudeCodeLLMProvider")
+    @patch("src.scenes.generator.get_llm_provider")
     def test_generate_scene_includes_timestamps_in_prompt(
-        self, mock_llm_class, generator, sample_scene, sample_timestamps, mock_llm_response, tmp_path
+        self, mock_get_provider, generator, sample_scene, sample_timestamps, mock_llm_response, tmp_path
     ):
         """Test that _generate_scene includes word timestamps in the prompt."""
-        mock_llm = MagicMock()
+        from src.understanding.llm_provider import ClaudeCodeLLMProvider
+        mock_llm = MagicMock(spec=ClaudeCodeLLMProvider)
         mock_llm.generate_with_file_access.return_value = mock_llm_response
-        mock_llm_class.return_value = mock_llm
+        mock_get_provider.return_value = mock_llm
 
         scenes_dir = tmp_path / "scenes"
         scenes_dir.mkdir()
@@ -879,14 +887,15 @@ export const TestSceneScene: React.FC = () => <AbsoluteFill>Test</AbsoluteFill>;
         assert '"This"' in prompt
         assert '"concept"' in prompt
 
-    @patch("src.scenes.generator.ClaudeCodeLLMProvider")
+    @patch("src.scenes.generator.get_llm_provider")
     def test_generate_scene_without_timestamps_uses_fallback(
-        self, mock_llm_class, generator, sample_scene, mock_llm_response, tmp_path
+        self, mock_get_provider, generator, sample_scene, mock_llm_response, tmp_path
     ):
         """Test that _generate_scene uses fallback when no timestamps provided."""
-        mock_llm = MagicMock()
+        from src.understanding.llm_provider import ClaudeCodeLLMProvider
+        mock_llm = MagicMock(spec=ClaudeCodeLLMProvider)
         mock_llm.generate_with_file_access.return_value = mock_llm_response
-        mock_llm_class.return_value = mock_llm
+        mock_get_provider.return_value = mock_llm
 
         scenes_dir = tmp_path / "scenes"
         scenes_dir.mkdir()
@@ -904,14 +913,15 @@ export const TestSceneScene: React.FC = () => <AbsoluteFill>Test</AbsoluteFill>;
         prompt = call_args[0][0]
         assert "NOT AVAILABLE" in prompt
 
-    @patch("src.scenes.generator.ClaudeCodeLLMProvider")
+    @patch("src.scenes.generator.get_llm_provider")
     def test_generate_scene_with_empty_timestamps_uses_fallback(
-        self, mock_llm_class, generator, sample_scene, mock_llm_response, tmp_path
+        self, mock_get_provider, generator, sample_scene, mock_llm_response, tmp_path
     ):
         """Test that _generate_scene uses fallback when timestamps list is empty."""
-        mock_llm = MagicMock()
+        from src.understanding.llm_provider import ClaudeCodeLLMProvider
+        mock_llm = MagicMock(spec=ClaudeCodeLLMProvider)
         mock_llm.generate_with_file_access.return_value = mock_llm_response
-        mock_llm_class.return_value = mock_llm
+        mock_get_provider.return_value = mock_llm
 
         scenes_dir = tmp_path / "scenes"
         scenes_dir.mkdir()

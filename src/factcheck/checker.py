@@ -11,6 +11,7 @@ from ..understanding.llm_provider import (
     ClaudeCodeLLMProvider,
     ClaudeCodeError,
     MockLLMProvider,
+    get_llm_provider,
 )
 from .models import (
     FactCheckIssue,
@@ -66,13 +67,8 @@ class FactChecker:
             llm_config = LLMConfig(provider="mock")
             self.llm = MockLLMProvider(llm_config)
         else:
-            # Use Claude Opus for best quality fact checking
-            llm_config = LLMConfig(provider="claude-code", model="claude-opus-4-5-20251101")
-            self.llm = ClaudeCodeLLMProvider(
-                llm_config,
-                working_dir=self.repo_root,
-                timeout=timeout,
-            )
+            from ..config import load_config
+            self.llm = get_llm_provider(load_config())
 
     def _log(self, message: str, indent: int = 0) -> None:
         """Print a message if verbose mode is enabled."""

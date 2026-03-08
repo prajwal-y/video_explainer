@@ -9,8 +9,7 @@ import json
 from typing import Any
 
 from ...project import Project
-from ...understanding.llm_provider import LLMProvider, ClaudeCodeLLMProvider
-from ...config import LLMConfig
+from ...understanding.llm_provider import LLMProvider, ClaudeCodeLLMProvider, get_llm_provider
 from ..models import (
     ModifyScenePatch,
     UpdateVisualCuePatch,
@@ -49,8 +48,8 @@ class PatchGenerator:
         self.verbose = verbose
 
         if llm_provider is None:
-            config = LLMConfig(provider="claude-code", model="claude-sonnet-4-20250514")
-            self.llm = ClaudeCodeLLMProvider(config, timeout=180)
+            from ...config import load_config
+            self.llm = get_llm_provider(load_config())
         else:
             self.llm = llm_provider
 

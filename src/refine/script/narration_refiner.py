@@ -13,9 +13,8 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from ...config import LLMConfig
 from ...project import Project
-from ...understanding.llm_provider import ClaudeCodeLLMProvider, LLMProvider
+from ...understanding.llm_provider import ClaudeCodeLLMProvider, LLMProvider, get_llm_provider
 from ..models import (
     AddBridgePatch,
     AddScenePatch,
@@ -140,12 +139,8 @@ class ScriptRefiner:
 
         # Use ClaudeCodeLLMProvider by default
         if llm_provider is None:
-            config = LLMConfig()
-            self.llm = ClaudeCodeLLMProvider(
-                config=config,
-                working_dir=project.root_dir,
-                timeout=300,  # 5 minute timeout per scene
-            )
+            from ...config import load_config
+            self.llm = get_llm_provider(load_config())
         else:
             self.llm = llm_provider
 

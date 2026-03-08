@@ -1,12 +1,15 @@
 """LLM Provider abstraction and implementations."""
 
 import json
+import os
 import re
 import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+import httpx
 
 from ..config import Config, LLMConfig
 from ..models import ContentAnalysis, Concept, Script, ScriptScene, VisualCue
@@ -754,6 +757,177 @@ class ClaudeCodeLLMProvider(LLMProvider):
         return list(set(modified))  # Remove duplicates
 
 
+class OpenAILLMProvider(LLMProvider):
+    """LLM provider using the OpenAI-compatible Chat Completions API.
+
+    Works with OpenAI, Azure OpenAI, and any provider exposing
+    a compatible /v1/chat/completions endpoint (set OPENAI_BASE_URL).
+
+    Requires OPENAI_API_KEY environment variable.
+    """
+
+    DEFAULT_BASE_URL = "https://api.openai.com/v1"
+
+    def __init__(self, config: LLMConfig, timeout: int = 300):
+        super().__init__(config)
+        self.timeout = timeout
+
+    @property
+    def api_key(self) -> str:
+        key = os.environ.get("OPENAI_API_KEY", "")
+        if not key:
+            raise ValueError(
+                "OPENAI_API_KEY environment variable is required for the OpenAI provider"
+            )
+        return key
+
+    @property
+    def base_url(self) -> str:
+        return os.environ.get("OPENAI_BASE_URL", self.DEFAULT_BASE_URL).rstrip("/")
+
+    def _chat(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        response_format: dict | None = None,
+    ) -> str:
+        messages: list[dict[str, str]] = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+
+        body: dict[str, Any] = {
+            "model": self.config.model,
+            "messages": messages,
+            "max_tokens": self.config.max_tokens,
+            "temperature": self.config.temperature,
+        }
+        if response_format:
+            body["response_format"] = response_format
+
+        resp = httpx.post(
+            f"{self.base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            json=body,
+            timeout=self.timeout,
+        )
+
+        if resp.status_code != 200:
+            raise RuntimeError(f"OpenAI API error ({resp.status_code}): {resp.text}")
+
+        data = resp.json()
+        return data["choices"][0]["message"]["content"]
+
+    def generate(self, prompt: str, system_prompt: str | None = None) -> str:
+        return self._chat(prompt, system_prompt)
+
+    def generate_json(
+        self, prompt: str, system_prompt: str | None = None
+    ) -> dict[str, Any]:
+        json_prompt = f"{prompt}\n\nRespond with valid JSON only. No markdown code blocks."
+        text = self._chat(
+            json_prompt,
+            system_prompt,
+            response_format={"type": "json_object"},
+        )
+        return self._parse_json(text)
+
+    @staticmethod
+    def _parse_json(text: str) -> dict[str, Any]:
+        text = text.strip()
+        json_block = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
+        if json_block:
+            text = json_block.group(1).strip()
+        json_obj = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
+        if json_obj:
+            text = json_obj.group(1)
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"Failed to parse JSON from OpenAI response: {e}\nResponse: {text[:500]}")
+
+
+class AnthropicLLMProvider(LLMProvider):
+    """LLM provider using the Anthropic Messages API directly.
+
+    Requires ANTHROPIC_API_KEY environment variable.
+    """
+
+    DEFAULT_BASE_URL = "https://api.anthropic.com"
+
+    def __init__(self, config: LLMConfig, timeout: int = 300):
+        super().__init__(config)
+        self.timeout = timeout
+
+    @property
+    def api_key(self) -> str:
+        key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not key:
+            raise ValueError(
+                "ANTHROPIC_API_KEY environment variable is required for the Anthropic provider"
+            )
+        return key
+
+    @property
+    def base_url(self) -> str:
+        return os.environ.get("ANTHROPIC_BASE_URL", self.DEFAULT_BASE_URL).rstrip("/")
+
+    def _chat(self, prompt: str, system_prompt: str | None = None) -> str:
+        body: dict[str, Any] = {
+            "model": self.config.model,
+            "max_tokens": self.config.max_tokens,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        if system_prompt:
+            body["system"] = system_prompt
+
+        resp = httpx.post(
+            f"{self.base_url}/v1/messages",
+            headers={
+                "x-api-key": self.api_key,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
+            },
+            json=body,
+            timeout=self.timeout,
+        )
+
+        if resp.status_code != 200:
+            raise RuntimeError(f"Anthropic API error ({resp.status_code}): {resp.text}")
+
+        data = resp.json()
+        return data["content"][0]["text"]
+
+    def generate(self, prompt: str, system_prompt: str | None = None) -> str:
+        return self._chat(prompt, system_prompt)
+
+    def generate_json(
+        self, prompt: str, system_prompt: str | None = None
+    ) -> dict[str, Any]:
+        json_prompt = f"{prompt}\n\nRespond with valid JSON only. No markdown code blocks."
+        text = self._chat(json_prompt, system_prompt)
+        return self._parse_json(text)
+
+    @staticmethod
+    def _parse_json(text: str) -> dict[str, Any]:
+        text = text.strip()
+        json_block = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
+        if json_block:
+            text = json_block.group(1).strip()
+        json_obj = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", text)
+        if json_obj:
+            text = json_obj.group(1)
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(
+                f"Failed to parse JSON from Anthropic response: {e}\nResponse: {text[:500]}"
+            )
+
+
 def get_llm_provider(config: Config | None = None) -> LLMProvider:
     """Get the appropriate LLM provider based on configuration.
 
@@ -778,10 +952,8 @@ def get_llm_provider(config: Config | None = None) -> LLMProvider:
     elif provider_name == "claude-code":
         return ClaudeCodeLLMProvider(config.llm)
     elif provider_name == "anthropic":
-        # TODO: Implement AnthropicLLMProvider
-        raise NotImplementedError("Anthropic provider not yet implemented")
+        return AnthropicLLMProvider(config.llm)
     elif provider_name == "openai":
-        # TODO: Implement OpenAILLMProvider
-        raise NotImplementedError("OpenAI provider not yet implemented")
+        return OpenAILLMProvider(config.llm)
     else:
         raise ValueError(f"Unknown LLM provider: {provider_name}")

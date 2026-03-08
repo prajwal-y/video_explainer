@@ -14,6 +14,7 @@ from ...understanding.llm_provider import (
     ClaudeCodeLLMProvider,
     LLMProvider,
     MockLLMProvider,
+    get_llm_provider,
 )
 from ..models import Beat
 
@@ -92,12 +93,8 @@ class BeatParser:
             working_dir: Working directory for file operations.
         """
         if llm_provider is None:
-            config = LLMConfig(provider="claude-code", model="claude-sonnet-4-20250514")
-            self.llm = ClaudeCodeLLMProvider(
-                config,
-                working_dir=working_dir or Path.cwd(),
-                timeout=120,  # 2 minutes should be enough for beat parsing
-            )
+            from ...config import load_config
+            self.llm = get_llm_provider(load_config())
         else:
             self.llm = llm_provider
 
