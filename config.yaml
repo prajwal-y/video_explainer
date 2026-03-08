@@ -3,8 +3,8 @@
 # Video settings
 video:
   resolution:
-    width: 1920
-    height: 1080
+    width: 1280
+    height: 720
   fps: 30
   format: "mp4"
   codec: "h264"
@@ -12,9 +12,9 @@ video:
 # LLM settings
 llm:
   # Provider: "claude-code" for production, "mock" for testing
-  provider: "claude-code"
+  provider: "openai"
   # Model to use (when provider is not mock)
-  model: "claude-sonnet-4-20250514"
+  model: "gpt-4o"
   # Maximum tokens for generation
   max_tokens: 4096
   # Temperature for generation
@@ -22,13 +22,13 @@ llm:
 
 # TTS settings
 tts:
-  provider: "mock"  # Use "elevenlabs" for real TTS (requires ELEVENLABS_API_KEY)
+  provider: "elevenlabs" # Use "edge" for free TTS without API key
   # Voice ID (will be set from environment or here)
   voice_id: null
   # Model to use
-  model: "eleven_multilingual_v2"
+  # model: "eleven_multilingual_v2"
   # Output format
-  output_format: "mp3_44100_128"
+  # output_format: "mp3_44100_128"
 
 # Budget limits (USD)
 budget:

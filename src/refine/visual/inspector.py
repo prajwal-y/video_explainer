@@ -19,6 +19,7 @@ from ...understanding.llm_provider import (
     ClaudeCodeResult,
     LLMProvider,
     MockLLMProvider,
+    get_llm_provider,
 )
 from ..models import (
     Beat,
@@ -1052,12 +1053,8 @@ class VisualInspector:
 
         # Set up LLM provider
         if llm_provider is None:
-            config = LLMConfig(provider="claude-code", model="claude-sonnet-4-20250514")
-            self.llm = ClaudeCodeLLMProvider(
-                config,
-                working_dir=project.root_dir,
-                timeout=600,  # 10 minutes for complex operations
-            )
+            from ...config import load_config
+            self.llm = get_llm_provider(load_config())
         else:
             self.llm = llm_provider
 

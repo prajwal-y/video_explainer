@@ -19,7 +19,7 @@ from typing import Any
 
 from ..config import Config, LLMConfig, load_config
 from ..models import Script
-from ..understanding.llm_provider import ClaudeCodeLLMProvider
+from ..understanding.llm_provider import ClaudeCodeLLMProvider, get_llm_provider
 from .models import ShortsStoryboard, ShortsBeat
 
 
@@ -478,17 +478,13 @@ Create visually stunning scenes that:
             prompt: The generation prompt.
             output_path: Path to write the scene file.
         """
-        llm_config = LLMConfig(provider="claude-code", model="claude-sonnet-4-20250514")
-        llm = ClaudeCodeLLMProvider(
-            llm_config,
-            working_dir=self.working_dir,
-            timeout=self.timeout,
-        )
+        llm = get_llm_provider(self.config)
 
         # Build system prompt dynamically from Remotion skill + shorts constraints
         system_prompt = self._build_system_prompt()
 
-        full_prompt = f"""## FIRST: Load the Remotion skill
+        if isinstance(llm, ClaudeCodeLLMProvider):
+            full_prompt = f"""## FIRST: Load the Remotion skill
 Before doing ANYTHING else, invoke the `/remotion` skill by using the Skill tool with skill="remotion".
 This loads essential Remotion best practices for animations, timing, and visual patterns.
 DO THIS NOW before proceeding.
@@ -502,19 +498,33 @@ DO THIS NOW before proceeding.
 Write the complete component code to the file: {output_path}
 """
 
-        result = llm.generate_with_file_access(full_prompt, allow_writes=True)
+            result = llm.generate_with_file_access(full_prompt, allow_writes=True)
 
-        if not result.success:
-            raise RuntimeError(f"LLM generation failed: {result.error_message}")
+            if not result.success:
+                raise RuntimeError(f"LLM generation failed: {result.error_message}")
 
-        # Verify file was created
-        if not output_path.exists():
-            code = self._extract_code(result.response)
-            if code:
-                with open(output_path, "w") as f:
-                    f.write(code)
-            else:
-                raise RuntimeError(f"Scene file not created: {output_path}")
+            # Verify file was created
+            if not output_path.exists():
+                code = self._extract_code(result.response)
+                if code:
+                    with open(output_path, "w") as f:
+                        f.write(code)
+                else:
+                    raise RuntimeError(f"Scene file not created: {output_path}")
+        else:
+            full_prompt = f"""{system_prompt}
+
+{prompt}
+
+Write the complete component code as a single TypeScript/TSX code block.
+"""
+            response = llm.generate(full_prompt)
+            code = self._extract_code(response)
+            if not code:
+                raise RuntimeError("LLM returned no extractable code")
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(output_path, "w") as f:
+                f.write(code)
 
     def _generate_vertical_styles(self, scenes_dir: Path, title: str) -> None:
         """Generate styles.ts for vertical shorts format.

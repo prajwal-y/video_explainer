@@ -12,10 +12,9 @@ import json
 from pathlib import Path
 from typing import Optional
 
-from ...config import LLMConfig
 from ...ingestion import parse_pdf
 from ...project import Project
-from ...understanding.llm_provider import ClaudeCodeLLMProvider, LLMProvider
+from ...understanding.llm_provider import ClaudeCodeLLMProvider, LLMProvider, get_llm_provider
 from ..models import (
     AddBridgePatch,
     AddScenePatch,
@@ -236,12 +235,8 @@ class ScriptAnalyzer:
 
         # Use ClaudeCodeLLMProvider by default
         if llm_provider is None:
-            config = LLMConfig()
-            self.llm = ClaudeCodeLLMProvider(
-                config=config,
-                working_dir=project.root_dir,
-                timeout=900,  # 15 minute timeout for analysis
-            )
+            from ...config import load_config
+            self.llm = get_llm_provider(load_config())
         else:
             self.llm = llm_provider
 

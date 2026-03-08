@@ -150,7 +150,7 @@ def cmd_voiceover(args: argparse.Namespace) -> int:
     """Generate voiceovers for a project."""
     from ..project import load_project
     from ..audio import get_tts_provider, ManualVoiceoverProvider
-    from ..config import Config, TTSConfig
+    from ..config import load_config, TTSConfig
 
     try:
         project = load_project(Path(args.projects_dir) / args.project)
@@ -193,7 +193,7 @@ def cmd_voiceover(args: argparse.Namespace) -> int:
         print(f"Audio directory: {audio_dir}")
 
         # Check for missing recordings
-        config = Config()
+        config = load_config()
         tts = ManualVoiceoverProvider(
             config.tts,
             audio_dir=audio_dir,
@@ -214,7 +214,7 @@ def cmd_voiceover(args: argparse.Namespace) -> int:
         print(f"Using TTS provider: {provider_name}")
 
         # Create TTS config
-        config = Config()
+        config = load_config()
         config.tts.provider = provider_name
         if project.tts.voice_id:
             config.tts.voice_id = project.tts.voice_id
@@ -640,7 +640,7 @@ def cmd_script(args: argparse.Namespace) -> int:
     from ..understanding import ContentAnalyzer
     from ..script import ScriptGenerator
     from ..planning import PlanGenerator
-    from ..config import Config
+    from ..config import load_config
 
     try:
         project = load_project(Path(args.projects_dir) / args.project)
@@ -732,7 +732,7 @@ def cmd_script(args: argparse.Namespace) -> int:
 
     # Analyze content
     print("\nAnalyzing content...")
-    config = Config()
+    config = load_config()
     if args.mock:
         config.llm.provider = "mock"
 
@@ -2851,7 +2851,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     from ..ingestion import parse_document
     from ..understanding import ContentAnalyzer
     from ..planning import PlanGenerator, PlanEditor
-    from ..config import Config
+    from ..config import load_config
 
     try:
         project = load_project(Path(args.projects_dir) / args.project)
@@ -2873,7 +2873,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
             return 1
 
         plan = PlanGenerator.load_plan(plan_path)
-        config = Config()
+        config = load_config()
         if args.mock:
             config.llm.provider = "mock"
         generator = PlanGenerator(config=config)
@@ -2891,7 +2891,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
             print(f"Plan is already approved (at {plan.approved_at})")
             return 0
 
-        config = Config()
+        config = load_config()
         generator = PlanGenerator(config=config)
         editor = PlanEditor(generator=generator, plan_dir=plan_dir)
         plan = editor.approve_plan(plan)
@@ -2907,7 +2907,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
             return 1
 
         plan = PlanGenerator.load_plan(plan_path)
-        config = Config()
+        config = load_config()
         if args.mock:
             config.llm.provider = "mock"
         generator = PlanGenerator(config=config)
@@ -2961,7 +2961,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
 
         # Analyze content
         print("\nAnalyzing content...")
-        config = Config()
+        config = load_config()
         if args.mock:
             config.llm.provider = "mock"
 
@@ -3085,7 +3085,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
             scenes_dir = project.root_dir / "scenes"
             if not scenes_dir.exists():
                 return False
-            tsx_files = list(scenes_dir.glob("Scene*.tsx"))
+            tsx_files = list(scenes_dir.glob("*Scene.tsx"))
             return len(tsx_files) > 0
         elif step == "voiceover":
             return (project.root_dir / "voiceover" / "manifest.json").exists()
@@ -3191,7 +3191,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
             result = cmd_scenes(step_args)
 
         elif step == "voiceover":
-            step_args.provider = args.voice_provider
+            step_args.provider = args.voice_provider or project.tts.provider or "edge"
             step_args.mock = args.mock
             step_args.continue_on_error = False
             step_args.export_script = False
@@ -3207,6 +3207,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
             step_args.mock = args.mock
             step_args.timeout = args.timeout
             step_args.force = args.force or not step_output_exists(step)
+            step_args.verbose = False
             result = cmd_storyboard(step_args)
 
         elif step == "render":
@@ -3331,8 +3332,8 @@ Use --interactive to pause for plan review before continuing.
     generate_parser.add_argument(
         "--voice-provider",
         choices=["elevenlabs", "edge"],
-        default="elevenlabs",
-        help="TTS provider for voiceover step (default: elevenlabs)",
+        default=None,
+        help="TTS provider for voiceover step (default: from project/config)",
     )
     generate_parser.add_argument(
         "--mock",
